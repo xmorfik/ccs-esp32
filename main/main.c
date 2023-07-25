@@ -19,18 +19,8 @@
 #include "mbcontroller.h"
 #include "modbus_params.h"
 
-
 #define MB_PORT_NUM     (CONFIG_MB_UART_PORT_NUM)   // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED    (CONFIG_MB_UART_BAUD_RATE)  // The communication speed of the UART
-
-// Note: Some pins on target chip cannot be assigned for UART communication.
-// See UART documentation for selected board and target to configure pins using Kconfig.
-
-// The number of parameters that intended to be used in the particular control process
-#define MASTER_MAX_CIDS num_device_parameters
-
-// Number of reading of parameters from slave
-#define MASTER_MAX_RETRY 3
 
 // Timeout to update cid over Modbus
 #define UPDATE_CIDS_TIMEOUT_MS          (500)
@@ -98,38 +88,13 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG_ETH, "~~~~~~~~~~~");
 }
 
-// Enumeration of modbus device addresses accessed by master device
-enum {
-    MB_DEVICE_ADDR1 = 1 // Only one slave device used for the test (add other slave addresses here)
-};
-
-// Enumeration of all supported CIDs for device (used in parameter definition table)
-enum {
-    CID_INP_DATA_0 = 0,
-    CID_HOLD_DATA_0,
-    CID_INP_DATA_1,
-    CID_HOLD_DATA_1,
-    CID_INP_DATA_2,
-    CID_HOLD_DATA_2,
-    CID_HOLD_TEST_REG,
-    CID_RELAY_P1,
-    CID_RELAY_P2,
-    CID_COUNT
-};
-
-// Example Data (Object) Dictionary for Modbus parameters:
-// The CID field in the table must be unique.
-// Modbus Slave Addr field defines slave address of the device with correspond parameter.
-// Modbus Reg Type - Type of Modbus register area (Holding register, Input Register and such).
-// Reg Start field defines the start Modbus register number and Reg Size defines the number of registers for the characteristic accordingly.
-// The Instance Offset defines offset in the appropriate parameter structure that will be used as instance to save parameter value.
-// Data Type, Data Size specify type of the characteristic and its data size.
-// Parameter Options field specifies the options that can be used to process parameter value (limits or masks).
-// Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
 const mb_parameter_descriptor_t device_parameters[] = {
-        // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
-        { CID_INP_DATA_0, STR("Data_channel_0"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-                INPUT_OFFSET(input_data0), PARAM_TYPE_FLOAT, 4, OPTS( -10, 10, 1 ), PAR_PERMS_READ_WRITE_TRIGGER }
+        { 0, STR("Holding"), STR("Holding"), 1, MB_PARAM_HOLDING, 0, 1,
+          HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 1, STR("Input"), STR("Input"), 1, MB_PARAM_INPUT, 0, 1,
+          INPUT_OFFSET(input_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 2, STR("Coil"), STR("Coil"), 1, MB_PARAM_COIL, 0, 1,
+          COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
 };
 
 // Calculate number of parameters in the table
@@ -166,134 +131,13 @@ static void* master_get_param_data(const mb_parameter_descriptor_t* param_descri
     return instance_ptr;
 }
 
-// User operation function to read slave values and check alarm
-static void master_operation_func(void *arg)
-{
-    esp_err_t err = ESP_OK;
-    float value = 0;
-    bool alarm_state = false;
-    const mb_parameter_descriptor_t* param_descriptor = NULL;
-
-    ESP_LOGI(TAG_MB, "Start modbus test...");
-
-    for(uint16_t retry = 0; retry <= MASTER_MAX_RETRY && (!alarm_state); retry++) {
-        // Read all found characteristics from slave(s)
-        for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
-        {
-            // Get data from parameters description table
-            // and use this information to fill the characteristics description table
-            // and having all required fields in just one table
-            err = mbc_master_get_cid_info(cid, &param_descriptor);
-            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
-                void* temp_data_ptr = master_get_param_data(param_descriptor);
-                assert(temp_data_ptr);
-                uint8_t type = 0;
-                if ((param_descriptor->param_type == PARAM_TYPE_ASCII) &&
-                    (param_descriptor->cid == CID_HOLD_TEST_REG)) {
-                    // Check for long array of registers of type PARAM_TYPE_ASCII
-                    err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
-                                                   (uint8_t*)temp_data_ptr, &type);
-                    if (err == ESP_OK) {
-                        ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = (0x%08x) read successful.",
-                                 param_descriptor->cid,
-                                 (char*)param_descriptor->param_key,
-                                 (char*)param_descriptor->param_units,
-                                 *(uint32_t*)temp_data_ptr);
-                        // Initialize data of test array and write to slave
-                        if (*(uint32_t*)temp_data_ptr != 0xAAAAAAAA) {
-                            memset((void*)temp_data_ptr, 0xAA, param_descriptor->param_size);
-                            *(uint32_t*)temp_data_ptr = 0xAAAAAAAA;
-                            err = mbc_master_set_parameter(cid, (char*)param_descriptor->param_key,
-                                                           (uint8_t*)temp_data_ptr, &type);
-                            if (err == ESP_OK) {
-                                ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = (0x%08x), write successful.",
-                                         param_descriptor->cid,
-                                         (char*)param_descriptor->param_key,
-                                         (char*)param_descriptor->param_units,
-                                         *(uint32_t*)temp_data_ptr);
-                            } else {
-                                ESP_LOGE(TAG_MB, "Characteristic #%d (%s) write fail, err = 0x%x (%s).",
-                                         param_descriptor->cid,
-                                         (char*)param_descriptor->param_key,
-                                         (int)err,
-                                         (char*)esp_err_to_name(err));
-                            }
-                        }
-                    } else {
-                        ESP_LOGE(TAG_MB, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
-                                 param_descriptor->cid,
-                                 (char*)param_descriptor->param_key,
-                                 (int)err,
-                                 (char*)esp_err_to_name(err));
-                    }
-                } else {
-                    err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
-                                                   (uint8_t*)&value, &type);
-                    if (err == ESP_OK) {
-                        *(float*)temp_data_ptr = value;
-                        if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
-                            (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
-                            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %f (0x%x) read successful.",
-                                     param_descriptor->cid,
-                                     (char*)param_descriptor->param_key,
-                                     (char*)param_descriptor->param_units,
-                                     value,
-                                     *(uint32_t*)temp_data_ptr);
-                            if (((value > param_descriptor->param_opts.max) ||
-                                 (value < param_descriptor->param_opts.min))) {
-                                alarm_state = true;
-                                break;
-                            }
-                        } else {
-                            uint16_t state = *(uint16_t*)temp_data_ptr;
-                            const char* rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
-                            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
-                                     param_descriptor->cid,
-                                     (char*)param_descriptor->param_key,
-                                     (char*)param_descriptor->param_units,
-                                     (const char*)rw_str,
-                                     *(uint16_t*)temp_data_ptr);
-                            if (state & param_descriptor->param_opts.opt1) {
-                                alarm_state = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        ESP_LOGE(TAG_MB, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
-                                 param_descriptor->cid,
-                                 (char*)param_descriptor->param_key,
-                                 (int)err,
-                                 (char*)esp_err_to_name(err));
-                    }
-                }
-                vTaskDelay(POLL_TIMEOUT_TICS); // timeout between polls
-            }
-        }
-        vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); //
-    }
-
-    if (alarm_state) {
-        ESP_LOGI(TAG_MB, "Alarm triggered by cid #%d.",
-                 param_descriptor->cid);
-    } else {
-        ESP_LOGE(TAG_MB, "Alarm is not triggered after %d retries.",
-                 MASTER_MAX_RETRY);
-    }
-    ESP_LOGI(TAG_MB, "Destroy master...");
-    ESP_ERROR_CHECK(mbc_master_destroy());
-}
-
 // Modbus master initialization
 static esp_err_t master_init(void)
 {
     // Initialize and start Modbus controller
     mb_communication_info_t comm = {
             .port = MB_PORT_NUM,
-#if CONFIG_MB_COMM_MODE_ASCII
-            .mode = MB_MODE_ASCII,
-#elif CONFIG_MB_COMM_MODE_RTU
             .mode = MB_MODE_RTU,
-#endif
             .baudrate = MB_DEV_SPEED,
             .parity = MB_PARITY_NONE
     };
@@ -335,10 +179,8 @@ static esp_err_t master_init(void)
     return err;
 }
 
-void app_main(void)
+void init_ethernet()
 {
-    ESP_ERROR_CHECK(master_init());
-    // Initialize Ethernet driver
     uint8_t eth_port_cnt = 0;
     esp_eth_handle_t *eth_handles;
     ESP_ERROR_CHECK(eth_init(&eth_handles, &eth_port_cnt));
@@ -361,8 +203,8 @@ void app_main(void)
         // esp-netif configuration parameters for each interface (name, priority, etc.).
         esp_netif_inherent_config_t esp_netif_config = ESP_NETIF_INHERENT_DEFAULT_ETH();
         esp_netif_config_t cfg_spi = {
-            .base = &esp_netif_config,
-            .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH
+                .base = &esp_netif_config,
+                .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH
         };
         char if_key_str[10];
         char if_desc_str[10];
@@ -389,26 +231,28 @@ void app_main(void)
     for (int i = 0; i < eth_port_cnt; i++) {
         ESP_ERROR_CHECK(esp_eth_start(eth_handles[i]));
     }
+}
 
-
-    float value = 0;
-
+void read_cid(uint16_t cid)
+{
+    uint16_t value = 0;
     esp_err_t err = ESP_OK;
+
     const mb_parameter_descriptor_t* param_descriptor = NULL;
-    err = mbc_master_get_cid_info(0, &param_descriptor);
+    err = mbc_master_get_cid_info(cid, &param_descriptor);
 
     void* temp_data_ptr = master_get_param_data(param_descriptor);
     assert(temp_data_ptr);
     uint8_t type = 0;
 
-    err = mbc_master_get_parameter(0, (char*)param_descriptor->param_key,
+    err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
                                    (uint8_t*)&value, &type);
 
     if (err == ESP_OK) {
-        *(float*)temp_data_ptr = value;
+        *(uint16_t*)temp_data_ptr = value;
         if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
             (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
-            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %f (0x%x) read successful.",
+            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %u (0x%x) read successful.",
                      param_descriptor->cid,
                      (char*)param_descriptor->param_key,
                      (char*)param_descriptor->param_units,
@@ -431,4 +275,15 @@ void app_main(void)
                  (int)err,
                  (char*)esp_err_to_name(err));
     }
+}
+
+void app_main(void)
+{
+    ESP_ERROR_CHECK(master_init());
+    // Initialize Ethernet driver
+    init_ethernet();
+
+    read_cid(0);
+    read_cid(1);
+    read_cid(2);
 }
