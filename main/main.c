@@ -277,13 +277,13 @@ void read_cid(uint16_t cid)
     }
 }
 
+esp_err_t start_rest_server(const char *base_path);
+
 void app_main(void)
 {
     ESP_ERROR_CHECK(master_init());
     // Initialize Ethernet driver
     init_ethernet();
 
-    read_cid(0);
-    read_cid(1);
-    read_cid(2);
+    ESP_ERROR_CHECK(start_rest_server("esp-home"));
 }
