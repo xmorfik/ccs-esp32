@@ -56,24 +56,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
     return httpd_resp_set_type(req, type);
 }
 
-/* Send HTTP response with the contents of the requested file */
-static esp_err_t rest_common_get_handler(httpd_req_t *req)
-{
-    httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    cJSON_AddStringToObject(root, "version", IDF_VER);
-    cJSON_AddNumberToObject(root, "cores", chip_info.cores);
-    const char *sys_info = cJSON_Print(root);
-    httpd_resp_sendstr(req, sys_info);
-    free((void *)sys_info);
-    cJSON_Delete(root);
-    return ESP_OK;
-}
-
-/* Simple handler for light brightness control */
-static esp_err_t light_brightness_post_handler(httpd_req_t *req)
+static esp_err_t set_mb_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int cur_len = 0;
@@ -94,26 +77,45 @@ static esp_err_t light_brightness_post_handler(httpd_req_t *req)
         cur_len += received;
     }
     buf[total_len] = '\0';
-
     cJSON *root = cJSON_Parse(buf);
-    int red = cJSON_GetObjectItem(root, "red")->valueint;
-    int green = cJSON_GetObjectItem(root, "green")->valueint;
-    int blue = cJSON_GetObjectItem(root, "blue")->valueint;
-    ESP_LOGI(REST_TAG, "Light control: red = %d, green = %d, blue = %d", red, green, blue);
+    int slaveId = cJSON_GetObjectItem(root, "slaveId")->valueint;
+    int registerId = cJSON_GetObjectItem(root, "registerId")->valueint;
+    int funcId = cJSON_GetObjectItem(root, "funcId")->valueint;
+    int value = cJSON_GetObjectItem(root, "value")->valueint;
+    ESP_LOGI(REST_TAG, "set: slaveId = %d, registerId = %d, funcId = %d, value = %d", slaveId, registerId, funcId, value);
     cJSON_Delete(root);
-    httpd_resp_sendstr(req, "Post control value successfully");
     return ESP_OK;
 }
 
-/* Simple handler for getting system handler */
-static esp_err_t system_info_get_handler(httpd_req_t *req)
+static esp_err_t get_mb_handler(httpd_req_t *req)
 {
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    int slaveId = cJSON_GetObjectItem(root, "slaveId")->valueint;
+    int registerId = cJSON_GetObjectItem(root, "registerId")->valueint;
+    int funcId = cJSON_GetObjectItem(root, "funcId")->valueint;
+    ESP_LOGI(REST_TAG, "get: slaveId = %d, registerId = %d, funcId = %d", slaveId, registerId, funcId);
+
     httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    cJSON_AddStringToObject(root, "version", IDF_VER);
-    cJSON_AddNumberToObject(root, "cores", chip_info.cores);
+    cJSON_AddStringToObject(root, "value", "10");
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
@@ -121,12 +123,15 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Simple handler for getting temperature data */
-static esp_err_t temperature_data_get_handler(httpd_req_t *req)
+/* Simple handler for getting system handler */
+static esp_err_t info_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "raw", esp_random() % 20);
+    esp_chip_info_t chip_info;
+    esp_chip_info(&chip_info);
+    cJSON_AddStringToObject(root, "version", IDF_VER);
+    cJSON_AddNumberToObject(root, "cores", chip_info.cores);
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
@@ -149,40 +154,29 @@ esp_err_t start_rest_server(const char *base_path)
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
 
     /* URI handler for fetching system info */
-    httpd_uri_t system_info_get_uri = {
-        .uri = "/api/v1/system/info",
+    httpd_uri_t info_uri = {
+        .uri = "/api/v1/info",
         .method = HTTP_GET,
-        .handler = system_info_get_handler,
+        .handler = info_handler,
         .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &system_info_get_uri);
+    httpd_register_uri_handler(server, &info_uri);
 
-    /* URI handler for fetching temperature data */
-    httpd_uri_t temperature_data_get_uri = {
-        .uri = "/api/v1/temp/raw",
-        .method = HTTP_GET,
-        .handler = temperature_data_get_handler,
-        .user_ctx = rest_context
+    httpd_uri_t get_mb_uri = {
+            .uri = "/api/v1/get",
+            .method = HTTP_POST,
+            .handler = get_mb_handler,
+            .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &temperature_data_get_uri);
+    httpd_register_uri_handler(server, &get_mb_uri);
 
-    /* URI handler for light brightness control */
-    httpd_uri_t light_brightness_post_uri = {
-        .uri = "/api/v1/light/brightness",
+    httpd_uri_t set_mb_uri = {
+        .uri = "/api/v1/set",
         .method = HTTP_POST,
-        .handler = light_brightness_post_handler,
+        .handler = set_mb_handler,
         .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &light_brightness_post_uri);
-
-    /* URI handler for getting web server files */
-    httpd_uri_t common_get_uri = {
-        .uri = "/*",
-        .method = HTTP_GET,
-        .handler = rest_common_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &common_get_uri);
+    httpd_register_uri_handler(server, &set_mb_uri);
 
     return ESP_OK;
 err_start:
