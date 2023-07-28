@@ -16,6 +16,7 @@
 #include "cJSON.h"
 
 int read_mb(uint16_t cid, int slaveId, int registerId);
+int set_mb(uint16_t cid, int slaveId, int registerId, int value);
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -84,7 +85,25 @@ static esp_err_t set_mb_handler(httpd_req_t *req)
     int registerId = cJSON_GetObjectItem(root, "registerId")->valueint;
     int funcId = cJSON_GetObjectItem(root, "funcId")->valueint;
     int value = cJSON_GetObjectItem(root, "value")->valueint;
+
+    switch (funcId) {
+        case 16:
+            set_mb(3,slaveId,registerId,value);
+            break;
+            //Holding
+        case 15:
+            set_mb(4,slaveId,registerId,value);
+            break;
+            //Coil
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+
     ESP_LOGI(REST_TAG, "set: slaveId = %d, registerId = %d, funcId = %d, value = %d", slaveId, registerId, funcId, value);
+    httpd_resp_set_type(req, "application/json");
+    const char *sys_info = cJSON_Print(root);
+    httpd_resp_sendstr(req, sys_info);
+    free((void *)sys_info);
     cJSON_Delete(root);
     return ESP_OK;
 }
@@ -114,7 +133,6 @@ static esp_err_t get_mb_handler(httpd_req_t *req)
     int slaveId = cJSON_GetObjectItem(root, "slaveId")->valueint;
     int registerId = cJSON_GetObjectItem(root, "registerId")->valueint;
     int funcId = cJSON_GetObjectItem(root, "funcId")->valueint;
-    ESP_LOGI(REST_TAG, "get: slaveId = %d, registerId = %d, funcId = %d", slaveId, registerId, funcId);
 
     int value = 0;
     switch (funcId) {
@@ -133,6 +151,8 @@ static esp_err_t get_mb_handler(httpd_req_t *req)
         default:
             return ESP_ERR_INVALID_ARG;
     }
+
+    ESP_LOGI(REST_TAG, "get: slaveId = %d, registerId = %d, funcId = %d", slaveId, registerId, funcId);
     httpd_resp_set_type(req, "application/json");
     cJSON_AddNumberToObject(root, "value",value);
     const char *sys_info = cJSON_Print(root);

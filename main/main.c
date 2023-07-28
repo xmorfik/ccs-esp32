@@ -94,7 +94,11 @@ mb_parameter_descriptor_t device_parameters[] = {
         { 1, STR("Input"), STR("Input"), 1, MB_PARAM_INPUT, 0, 1,
           INPUT_OFFSET(input_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
         { 2, STR("Coil"), STR("Coil"), 1, MB_PARAM_COIL, 0, 1,
-          COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
+          COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 3, STR("Set coil"), STR("Set coil"), 1, MB_PARAM_HOLDING, 0, 1,
+                    COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 4, STR("Set holding"), STR("Set holding"), 1, MB_PARAM_COIL, 0, 1,
+                    COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
 };
 
 // Calculate number of parameters in the table
@@ -247,6 +251,63 @@ int read_mb(uint16_t cid, int slaveId, int registerId)
     void* temp_data_ptr = master_get_param_data(param_descriptor);
     assert(temp_data_ptr);
     uint8_t type = 0;
+
+    err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
+                                   (uint8_t*)&value, &type);
+
+    if (err == ESP_OK) {
+        *(uint16_t*)temp_data_ptr = value;
+        if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
+            (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
+            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %u (0x%x) read successful.",
+                     param_descriptor->cid,
+                     (char*)param_descriptor->param_key,
+                     (char*)param_descriptor->param_units,
+                     value,
+                     *(uint32_t*)temp_data_ptr);
+        } else {
+            uint16_t state = *(uint16_t*)temp_data_ptr;
+            const char* rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
+            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
+                     param_descriptor->cid,
+                     (char*)param_descriptor->param_key,
+                     (char*)param_descriptor->param_units,
+                     (const char*)rw_str,
+                     *(uint16_t*)temp_data_ptr);
+        }
+    } else {
+        ESP_LOGE(TAG_MB, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
+                 param_descriptor->cid,
+                 (char*)param_descriptor->param_key,
+                 (int)err,
+                 (char*)esp_err_to_name(err));
+    }
+
+    return value;
+}
+
+int set_mb(uint16_t cid, int slaveId, int registerId, int value)
+{
+    esp_err_t err = ESP_OK;
+
+    device_parameters[cid].mb_slave_addr = (uint8_t)slaveId;
+    device_parameters[cid].mb_reg_start = registerId;
+
+    const mb_parameter_descriptor_t* param_descriptor = NULL;
+    err = mbc_master_get_cid_info(cid, &param_descriptor);
+
+    void* temp_data_ptr = master_get_param_data(param_descriptor);
+    assert(temp_data_ptr);
+    uint8_t type = 0;
+
+    err = mbc_master_set_parameter(cid, (char*)param_descriptor->param_key,
+                                             (uint8_t*)&value, &type);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG_MB, "Set parameter data successfully.");
+    } else {
+        ESP_LOGE(TAG_MB, "Set data fail, err = 0x%x (%s).", (int)err, (char*)esp_err_to_name(err));
+    }
 
     err = mbc_master_get_parameter(cid, (char*)param_descriptor->param_key,
                                    (uint8_t*)&value, &type);
