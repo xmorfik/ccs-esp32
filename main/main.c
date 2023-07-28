@@ -95,9 +95,9 @@ mb_parameter_descriptor_t device_parameters[] = {
           INPUT_OFFSET(input_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
         { 2, STR("Coil"), STR("Coil"), 1, MB_PARAM_COIL, 0, 1,
           COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 3, STR("Set coil"), STR("Set coil"), 1, MB_PARAM_HOLDING, 0, 1,
+        { 3, STR("Set holding"), STR("Set holding"), 1, MB_PARAM_HOLDING, 0, 1,
                     COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 4, STR("Set holding"), STR("Set holding"), 1, MB_PARAM_COIL, 0, 1,
+        { 4, STR("Set coil"), STR("Set coil"), 1, MB_PARAM_COIL, 0, 1,
                 HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
 };
 
