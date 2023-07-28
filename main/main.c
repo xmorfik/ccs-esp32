@@ -88,7 +88,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG_ETH, "~~~~~~~~~~~");
 }
 
-const mb_parameter_descriptor_t device_parameters[] = {
+mb_parameter_descriptor_t device_parameters[] = {
         { 0, STR("Holding"), STR("Holding"), 1, MB_PARAM_HOLDING, 0, 1,
           HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
         { 1, STR("Input"), STR("Input"), 1, MB_PARAM_INPUT, 0, 1,
@@ -233,10 +233,13 @@ void init_ethernet()
     }
 }
 
-void read_cid(uint16_t cid)
+int read_mb(uint16_t cid, int slaveId, int registerId)
 {
     uint16_t value = 0;
     esp_err_t err = ESP_OK;
+
+    device_parameters[cid].mb_slave_addr = (uint8_t)slaveId;
+    device_parameters[cid].mb_reg_start = registerId;
 
     const mb_parameter_descriptor_t* param_descriptor = NULL;
     err = mbc_master_get_cid_info(cid, &param_descriptor);
@@ -275,6 +278,8 @@ void read_cid(uint16_t cid)
                  (int)err,
                  (char*)esp_err_to_name(err));
     }
+
+    return value;
 }
 
 esp_err_t start_rest_server(const char *base_path);

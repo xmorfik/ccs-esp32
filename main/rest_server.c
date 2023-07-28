@@ -15,6 +15,8 @@
 #include "esp_vfs.h"
 #include "cJSON.h"
 
+int read_mb(uint16_t cid, int slaveId, int registerId);
+
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
     do                                                                                 \
@@ -114,8 +116,25 @@ static esp_err_t get_mb_handler(httpd_req_t *req)
     int funcId = cJSON_GetObjectItem(root, "funcId")->valueint;
     ESP_LOGI(REST_TAG, "get: slaveId = %d, registerId = %d, funcId = %d", slaveId, registerId, funcId);
 
+    int value = 0;
+    switch (funcId) {
+        case 3:
+            value = read_mb(0,slaveId,registerId);
+            break;
+            //Holding
+        case 4:
+            value = read_mb(1,slaveId,registerId);
+            break;
+            //Input
+        case 1:
+            value = read_mb(2,slaveId,registerId);
+            break;
+            //Coil
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
     httpd_resp_set_type(req, "application/json");
-    cJSON_AddStringToObject(root, "value", "10");
+    cJSON_AddNumberToObject(root, "value",value);
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
@@ -155,7 +174,7 @@ esp_err_t start_rest_server(const char *base_path)
 
     /* URI handler for fetching system info */
     httpd_uri_t info_uri = {
-        .uri = "/api/v1/info",
+        .uri = "/info",
         .method = HTTP_GET,
         .handler = info_handler,
         .user_ctx = rest_context
@@ -163,7 +182,7 @@ esp_err_t start_rest_server(const char *base_path)
     httpd_register_uri_handler(server, &info_uri);
 
     httpd_uri_t get_mb_uri = {
-            .uri = "/api/v1/get",
+            .uri = "/read-modbus",
             .method = HTTP_POST,
             .handler = get_mb_handler,
             .user_ctx = rest_context
@@ -171,7 +190,7 @@ esp_err_t start_rest_server(const char *base_path)
     httpd_register_uri_handler(server, &get_mb_uri);
 
     httpd_uri_t set_mb_uri = {
-        .uri = "/api/v1/set",
+        .uri = "/set-modbus",
         .method = HTTP_POST,
         .handler = set_mb_handler,
         .user_ctx = rest_context
