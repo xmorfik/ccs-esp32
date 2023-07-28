@@ -95,6 +95,10 @@ static esp_err_t set_mb_handler(httpd_req_t *req)
             set_mb(4,slaveId,registerId,value);
             break;
             //Coil
+        case 10:
+            set_mb(3,slaveId,registerId,value);
+            break;
+            //Holding multi
         default:
             return ESP_ERR_INVALID_ARG;
     }
