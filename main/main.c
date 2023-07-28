@@ -316,7 +316,7 @@ int set_mb(uint16_t cid, int slaveId, int registerId, int value)
         *(uint16_t*)temp_data_ptr = value;
         if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
             (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
-            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %u (0x%x) read successful.",
+            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %u (0x%x) set successful.",
                      param_descriptor->cid,
                      (char*)param_descriptor->param_key,
                      (char*)param_descriptor->param_units,
@@ -325,7 +325,7 @@ int set_mb(uint16_t cid, int slaveId, int registerId, int value)
         } else {
             uint16_t state = *(uint16_t*)temp_data_ptr;
             const char* rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
-            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
+            ESP_LOGI(TAG_MB, "Characteristic #%d %s (%s) value = %s (0x%x) set successful.",
                      param_descriptor->cid,
                      (char*)param_descriptor->param_key,
                      (char*)param_descriptor->param_units,
@@ -333,7 +333,7 @@ int set_mb(uint16_t cid, int slaveId, int registerId, int value)
                      *(uint16_t*)temp_data_ptr);
         }
     } else {
-        ESP_LOGE(TAG_MB, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
+        ESP_LOGE(TAG_MB, "Characteristic #%d (%s) set fail, err = 0x%x (%s).",
                  param_descriptor->cid,
                  (char*)param_descriptor->param_key,
                  (int)err,
