@@ -88,15 +88,15 @@ static esp_err_t set_mb_handler(httpd_req_t *req)
 
     switch (funcId) {
         case 16:
-            set_mb(3,slaveId,registerId,value);
+            value = set_mb(3,slaveId,registerId,value);
             break;
             //Holding
         case 15:
-            set_mb(4,slaveId,registerId,value);
+            value = set_mb(4,slaveId,registerId,value);
             break;
             //Coil
         case 10:
-            set_mb(3,slaveId,registerId,value);
+            value = set_mb(3,slaveId,registerId,value);
             break;
             //Holding multi
         default:
@@ -104,9 +104,12 @@ static esp_err_t set_mb_handler(httpd_req_t *req)
     }
 
     ESP_LOGI(REST_TAG, "set: slaveId = %d, registerId = %d, funcId = %d, value = %d", slaveId, registerId, funcId, value);
+
     httpd_resp_set_type(req, "application/json");
+    cJSON_AddNumberToObject(root, "currentValue",value);
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
+
     free((void *)sys_info);
     cJSON_Delete(root);
     return ESP_OK;
@@ -158,7 +161,7 @@ static esp_err_t get_mb_handler(httpd_req_t *req)
 
     ESP_LOGI(REST_TAG, "get: slaveId = %d, registerId = %d, funcId = %d", slaveId, registerId, funcId);
     httpd_resp_set_type(req, "application/json");
-    cJSON_AddNumberToObject(root, "value",value);
+    cJSON_AddNumberToObject(root, "currentValue",value);
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);

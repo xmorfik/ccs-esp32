@@ -239,7 +239,7 @@ void init_ethernet()
 
 int read_mb(uint16_t cid, int slaveId, int registerId)
 {
-    uint16_t value = 0;
+    int value = 0;
     esp_err_t err = ESP_OK;
 
     device_parameters[cid].mb_slave_addr = (uint8_t)slaveId;
@@ -276,6 +276,7 @@ int read_mb(uint16_t cid, int slaveId, int registerId)
                      *(uint16_t*)temp_data_ptr);
         }
     } else {
+        value = -1;
         ESP_LOGE(TAG_MB, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
                  param_descriptor->cid,
                  (char*)param_descriptor->param_key,
@@ -306,6 +307,7 @@ int set_mb(uint16_t cid, int slaveId, int registerId, int value)
     if (err == ESP_OK) {
         ESP_LOGI(TAG_MB, "Set parameter data successfully.");
     } else {
+        value = -1;
         ESP_LOGE(TAG_MB, "Set data fail, err = 0x%x (%s).", (int)err, (char*)esp_err_to_name(err));
     }
 
@@ -333,6 +335,7 @@ int set_mb(uint16_t cid, int slaveId, int registerId, int value)
                      *(uint16_t*)temp_data_ptr);
         }
     } else {
+        value = -1;
         ESP_LOGE(TAG_MB, "Characteristic #%d (%s) set fail, err = 0x%x (%s).",
                  param_descriptor->cid,
                  (char*)param_descriptor->param_key,
