@@ -89,16 +89,11 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 mb_parameter_descriptor_t device_parameters[] = {
-        { 0, STR("Holding"), STR("Holding"), 1, MB_PARAM_HOLDING, 0, 1,
-          HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 1, STR("Input"), STR("Input"), 1, MB_PARAM_INPUT, 0, 1,
-          INPUT_OFFSET(input_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 2, STR("Coil"), STR("Coil"), 1, MB_PARAM_COIL, 0, 1,
-          COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 3, STR("Set holding"), STR("Set holding"), 1, MB_PARAM_HOLDING, 0, 1,
-                    COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
-        { 4, STR("Set coil"), STR("Set coil"), 1, MB_PARAM_COIL, 0, 1,
-                HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
+        { 0, STR("Holding"), STR("Holding"), 1, MB_PARAM_HOLDING, 0, 1,HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 1, STR("Input"), STR("Input"), 1, MB_PARAM_INPUT, 0, 1,INPUT_OFFSET(input_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 2, STR("Coil"), STR("Coil"), 1, MB_PARAM_COIL, 0, 1,COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 1, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 3, STR("Set holding"), STR("Set holding"), 1, MB_PARAM_HOLDING, 0, 1, HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, 2, OPTS(0,65535,1), PAR_PERMS_READ_WRITE_TRIGGER },
+        { 4, STR("Set coil"), STR("Set coil"), 1, MB_PARAM_COIL, 0, 1, COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 1, OPTS(1,0,0), PAR_PERMS_READ_WRITE_TRIGGER }
 };
 
 // Calculate number of parameters in the table
